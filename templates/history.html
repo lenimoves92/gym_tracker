@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="mb-4">Workout History</h2>
+
+{% if not grouped_list %}
+  <p class="text-muted">No sets logged yet. Go log one!</p>
+{% endif %}
+
+{% for date, sets in grouped_list %}
+  <h5 class="mt-4 border-bottom pb-1 text-secondary">{{ date }}</h5>
+  {% for s in sets %}
+  <div class="card mb-2 shadow-sm">
+    <div class="card-body py-2">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <strong>{{ s['exercise'] }}</strong><br>
+          <span class="text-muted">
+            {{ s['weight'] }} {{ s['weight_unit'] }}
+            &bull; {{ s['reps'] }} reps
+            &bull; RPE {{ s['rpe'] }}
+          </span>
+          {% if s['rpe'] <= 6 %}
+            <span class="badge bg-warning text-dark ms-1">Go heavier next time</span>
+          {% endif %}
+          {% if s['notes'] %}
+            <br><small class="text-muted fst-italic">{{ s['notes'] }}</small>
+          {% endif %}
+        </div>
+        <div class="text-end flex-shrink-0 ms-2">
+          <small class="text-muted d-block">{{ s['logged_at'][11:16] }}</small>
+          <form action="{{ url_for('delete_set', set_id=s['id']) }}"
+                method="POST" class="mt-1"
+                onsubmit="return confirm('Delete this set?')">
+            <button class="btn btn-sm btn-outline-danger">&times;</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% endfor %}
+
+{% endblock %}

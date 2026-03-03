@@ -1,0 +1,19 @@
+body {
+    background-color: #f8f9fa;
+}
+
+/* Larger touch targets for mobile */
+.form-control-lg, .form-select-lg {
+    font-size: 1.1rem;
+    padding: 0.65rem 1rem;
+}
+
+.card-body {
+    font-size: 0.95rem;
+}
+
+/* Make the RPE slider bigger for fat fingers */
+input[type="range"] {
+    height: 2rem;
+    cursor: pointer;
+}

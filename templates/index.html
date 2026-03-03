@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="mb-4">Log a Set</h2>
+
+<form action="{{ url_for('log_set') }}" method="POST">
+
+  <div class="mb-3">
+    <label for="equipment_id" class="form-label fw-bold">Exercise</label>
+    <select name="equipment_id" id="equipment_id" class="form-select form-select-lg" required>
+      <option value="">-- Choose exercise --</option>
+      {% for item in equipment_list %}
+        <option value="{{ item['id'] }}">{{ item['name'] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="mb-3 row g-2 align-items-end">
+    <div class="col-8">
+      <label for="weight" class="form-label fw-bold">Weight</label>
+      <input type="number" name="weight" id="weight"
+             class="form-control form-control-lg"
+             step="0.5" min="0" placeholder="e.g. 60" required>
+    </div>
+    <div class="col-4">
+      <label for="weight_unit" class="form-label fw-bold">Unit</label>
+      <select name="weight_unit" id="weight_unit" class="form-select form-select-lg">
+        <option value="kg">kg</option>
+        <option value="lbs">lbs</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label for="reps" class="form-label fw-bold">Reps</label>
+    <input type="number" name="reps" id="reps"
+           class="form-control form-control-lg"
+           min="1" max="100" placeholder="e.g. 8" required>
+  </div>
+
+  <div class="mb-3">
+    <label for="rpe" class="form-label fw-bold">
+      RPE (effort 1–10) &nbsp;<span class="badge bg-secondary fs-6" id="rpe-value">5</span>
+    </label>
+    <input type="range" name="rpe" id="rpe"
+           class="form-range" min="1" max="10" value="5"
+           oninput="document.getElementById('rpe-value').textContent = this.value">
+    <div class="d-flex justify-content-between text-muted small mt-1">
+      <span>1 — very easy</span><span>10 — max effort</span>
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <label for="notes" class="form-label fw-bold">Notes <span class="text-muted fw-normal">(optional)</span></label>
+    <input type="text" name="notes" id="notes"
+           class="form-control" placeholder="e.g. paused reps, felt strong today">
+  </div>
+
+  <button type="submit" class="btn btn-primary btn-lg w-100">Log Set</button>
+</form>
+
+{% endblock %}
