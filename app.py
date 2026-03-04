@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash
@@ -17,9 +20,9 @@ with app.app_context():
 @app.route('/')
 def index():
     conn = get_db()
-    equipment_list = conn.execute(
-        "SELECT id, name FROM equipment ORDER BY name"
-    ).fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name FROM equipment ORDER BY name")
+    equipment_list = cur.fetchall()
     conn.close()
     return render_template('index.html', equipment_list=equipment_list)
 
@@ -65,10 +68,11 @@ def log_set():
         return redirect(url_for('index'))
 
     conn = get_db()
-    conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         """INSERT INTO workout_sets
            (equipment_id, weight, weight_unit, reps, rpe, logged_at, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
         (int(equipment_id), w, weight_unit, r, rpe_val, logged_at, notes or None)
     )
     conn.commit()
@@ -90,14 +94,16 @@ def log_set():
 @app.route('/history')
 def history():
     conn = get_db()
-    rows = conn.execute(
+    cur = conn.cursor()
+    cur.execute(
         """SELECT ws.id, e.name AS exercise, ws.weight, ws.weight_unit,
                   ws.reps, ws.rpe, ws.logged_at, ws.notes
            FROM workout_sets ws
            JOIN equipment e ON ws.equipment_id = e.id
            ORDER BY ws.logged_at DESC
            LIMIT 300"""
-    ).fetchall()
+    )
+    rows = cur.fetchall()
     conn.close()
 
     grouped = {}
@@ -112,7 +118,8 @@ def history():
 @app.route('/delete/<int:set_id>', methods=['POST'])
 def delete_set(set_id):
     conn = get_db()
-    conn.execute("DELETE FROM workout_sets WHERE id = ?", (set_id,))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM workout_sets WHERE id = %s", (set_id,))
     conn.commit()
     conn.close()
     flash("Set deleted.", 'info')
@@ -124,9 +131,9 @@ def delete_set(set_id):
 @app.route('/equipment')
 def equipment():
     conn = get_db()
-    equipment_list = conn.execute(
-        "SELECT id, name, is_custom FROM equipment ORDER BY name"
-    ).fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, is_custom FROM equipment ORDER BY name")
+    equipment_list = cur.fetchall()
     conn.close()
     return render_template('equipment.html', equipment_list=equipment_list)
 
@@ -139,14 +146,16 @@ def add_equipment():
         return redirect(url_for('equipment'))
 
     conn = get_db()
+    cur = conn.cursor()
     try:
-        conn.execute(
-            "INSERT INTO equipment (name, is_custom) VALUES (?, 1)",
+        cur.execute(
+            "INSERT INTO equipment (name, is_custom) VALUES (%s, 1)",
             (name,)
         )
         conn.commit()
         flash(f"'{name}' added.", 'success')
     except Exception:
+        conn.rollback()
         flash(f"'{name}' already exists.", 'warning')
     finally:
         conn.close()
@@ -157,11 +166,13 @@ def add_equipment():
 @app.route('/equipment/delete/<int:equipment_id>', methods=['POST'])
 def delete_equipment(equipment_id):
     conn = get_db()
-    row = conn.execute(
-        "SELECT is_custom FROM equipment WHERE id = ?", (equipment_id,)
-    ).fetchone()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT is_custom FROM equipment WHERE id = %s", (equipment_id,)
+    )
+    row = cur.fetchone()
     if row and row['is_custom'] == 1:
-        conn.execute("DELETE FROM equipment WHERE id = ?", (equipment_id,))
+        cur.execute("DELETE FROM equipment WHERE id = %s", (equipment_id,))
         conn.commit()
         flash("Exercise removed.", 'info')
     else:
