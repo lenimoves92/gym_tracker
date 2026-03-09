@@ -181,6 +181,111 @@ def delete_equipment(equipment_id):
     return redirect(url_for('equipment'))
 
 
+# --- Overview ---
+
+LBS_TO_KG = 0.453592
+
+@app.route('/overview')
+def overview():
+    conn = get_db()
+    cur = conn.cursor()
+
+    # All exercises for the dropdown
+    cur.execute("SELECT id, name FROM equipment ORDER BY name")
+    equipment_list = cur.fetchall()
+
+    selected_id   = request.args.get('exercise_id', type=int)
+    selected_name = None
+    sessions      = [None, None]   # always two slots; None = no data
+    chart_data    = None           # populated when an exercise is selected
+
+    if selected_id:
+        # Resolve display name
+        cur.execute("SELECT name FROM equipment WHERE id = %s", (selected_id,))
+        row = cur.fetchone()
+        if row:
+            selected_name = row['name']
+
+        # Find the last 2 distinct calendar dates for the Topic-1 panel
+        cur.execute(
+            """SELECT DISTINCT DATE(logged_at) AS session_date
+               FROM workout_sets
+               WHERE equipment_id = %s
+               ORDER BY session_date DESC
+               LIMIT 2""",
+            (selected_id,)
+        )
+        date_rows = cur.fetchall()
+
+        for i, date_row in enumerate(date_rows):
+            session_date = str(date_row['session_date'])
+            cur.execute(
+                """SELECT weight, weight_unit, reps, rpe
+                   FROM workout_sets
+                   WHERE equipment_id = %s
+                     AND DATE(logged_at) = %s
+                   ORDER BY logged_at ASC""",
+                (selected_id, session_date)
+            )
+            sets = cur.fetchall()
+            sessions[i] = {'date': session_date, 'sets': sets}
+
+        # --- Chart: last 6 session dates ---
+        cur.execute(
+            """SELECT DISTINCT DATE(logged_at) AS session_date
+               FROM workout_sets
+               WHERE equipment_id = %s
+               ORDER BY session_date DESC
+               LIMIT 6""",
+            (selected_id,)
+        )
+        chart_dates = [str(r['session_date']) for r in cur.fetchall()]
+        chart_dates.reverse()   # oldest → newest left to right
+
+        # For each date fetch sets in order
+        chart_sessions = []
+        for session_date in chart_dates:
+            cur.execute(
+                """SELECT weight, weight_unit, reps
+                   FROM workout_sets
+                   WHERE equipment_id = %s
+                     AND DATE(logged_at) = %s
+                   ORDER BY logged_at ASC""",
+                (selected_id, session_date)
+            )
+            raw_sets = cur.fetchall()
+            sets_out = []
+            for s in raw_sets:
+                weight_kg = float(s['weight']) * (LBS_TO_KG if s['weight_unit'] == 'lbs' else 1.0)
+                load      = round(s['reps'] * weight_kg, 1)
+                sets_out.append({
+                    'reps':   s['reps'],
+                    'weight': float(s['weight']),
+                    'unit':   s['weight_unit'],
+                    'load':   load,
+                })
+            chart_sessions.append({'date': session_date, 'sets': sets_out})
+
+        # How many set-slots do we need across all sessions?
+        max_sets = max((len(s['sets']) for s in chart_sessions), default=0)
+
+        chart_data = {
+            'dates':       chart_dates,
+            'sessions':    chart_sessions,
+            'max_sets':    max_sets,
+        }
+
+    conn.close()
+    return render_template(
+        'overview.html',
+        equipment_list=equipment_list,
+        selected_id=selected_id,
+        selected_name=selected_name,
+        sessions=sessions,
+        chart_data=chart_data,
+    )
+
+
 # --- Entry point ---
 
 if __name__ == '__main__':

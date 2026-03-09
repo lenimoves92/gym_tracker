@@ -12,6 +12,7 @@
     <nav class="navbar navbar-dark bg-dark px-3">
         <span class="navbar-brand fw-bold">Gym Tracker</span>
         <div>
+            <a href="{{ url_for('overview') }}" class="btn btn-sm btn-outline-light me-1">Overview</a>
             <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-light me-1">Log Set</a>
             <a href="{{ url_for('history') }}" class="btn btn-sm btn-outline-light me-1">History</a>
             <a href="{{ url_for('equipment') }}" class="btn btn-sm btn-outline-light">Equipment</a>

@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="mb-4">Overview</h2>
+
+{# ── Exercise selector ── #}
+<form method="GET" action="{{ url_for('overview') }}" class="mb-4">
+  <div class="row g-2 align-items-center">
+    <div class="col-auto">
+      <label for="exercise_id" class="col-form-label fw-semibold">Exercise:</label>
+    </div>
+    <div class="col-auto">
+      <select name="exercise_id" id="exercise_id"
+              class="form-select form-select-lg"
+              onchange="this.form.submit()">
+        <option value="">— select —</option>
+        {% for e in equipment_list %}
+          <option value="{{ e['id'] }}"
+            {% if e['id'] == selected_id %}selected{% endif %}>
+            {{ e['name'] }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+</form>
+
+{% if selected_id %}
+
+  {# ── Two-column layout: chart left, session cards right ── #}
+  <div class="row g-4 align-items-start">
+
+    {# ── Chart (Topic 2) — left, ~2/3 width ── #}
+    <div class="col-12 col-md-8">
+      {% if chart_data and chart_data.dates %}
+        <canvas id="loadChart"></canvas>
+      {% else %}
+        <p class="text-muted">No training data yet for this exercise.</p>
+      {% endif %}
+    </div>
+
+    {# ── Last 2 Sessions (Topic 1) — right, ~1/3 width, stacked ── #}
+    <div class="col-12 col-md-4">
+      {% for session in sessions %}
+      <div class="card shadow-sm mb-3
+        {% if session %}border-primary{% else %}border-secondary{% endif %}">
+        <div class="card-header fw-semibold
+          {% if session %}bg-primary text-white{% else %}bg-light text-muted{% endif %}">
+          {% if session %}
+            {{ "Last session" if loop.index == 1 else "Previous session" }}
+            &mdash; {{ session['date'] }}
+          {% else %}
+            {{ "Last session" if loop.index == 1 else "Previous session" }}
+            &mdash; no data
+          {% endif %}
+        </div>
+        <div class="card-body py-2">
+          {% if session %}
+            <table class="table table-sm table-borderless mb-0">
+              <thead class="text-muted small">
+                <tr>
+                  <th>#</th>
+                  <th>Reps</th>
+                  <th>Weight</th>
+                  <th>RPE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in session['sets'] %}
+                <tr>
+                  <td class="text-muted">{{ loop.index }}</td>
+                  <td>{{ s['reps'] }}</td>
+                  <td>{{ s['weight'] }} {{ s['weight_unit'] }}</td>
+                  <td>{{ s['rpe'] }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p class="text-muted mb-0">—</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>{# end row #}
+
+{% else %}
+  <p class="text-muted">Select an exercise above to see your last sessions.</p>
+{% endif %}
+
+{% if chart_data and chart_data.dates %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  // ── Palette: one color per set slot (s1, s2, s3, ...) ──
+  const COLORS = [
+    'rgba( 54, 162, 235, 0.85)',  // s1 – blue
+    'rgba(255, 159,  64, 0.85)',  // s2 – orange
+    'rgba( 75, 192, 192, 0.85)',  // s3 – teal
+    'rgba(153, 102, 255, 0.85)',  // s4 – purple
+    'rgba(255,  99, 132, 0.85)',  // s5 – red
+    'rgba(255, 205,  86, 0.85)',  // s6 – yellow
+  ];
+  const BORDER = COLORS.map(c => c.replace('0.85', '1'));
+
+  const sessions  = {{ chart_data.sessions | tojson }};
+  const maxSets   = {{ chart_data.max_sets }};
+  const labels    = {{ chart_data.dates    | tojson }};
+
+  // Build one Chart.js dataset per set-slot index
+  const datasets = [];
+  for (let si = 0; si < maxSets; si++) {
+    const loads = sessions.map(sess =>
+      si < sess.sets.length ? sess.sets[si].load : 0
+    );
+    datasets.push({
+      label: `s${si + 1}`,
+      data:  loads,
+      backgroundColor: COLORS[si % COLORS.length],
+      borderColor:     BORDER[si % BORDER.length],
+      borderWidth: 1,
+    });
+  }
+
+  // ── Custom plugin: column-aligned row labels above bars ──
+  const LABEL_FONT = '15px monospace';   // ~0.95rem
+  const alignedLabelsPlugin = {
+    id: 'alignedLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx, scales: { x } } = chart;
+      ctx.save();
+      ctx.font         = LABEL_FONT;
+      ctx.fillStyle    = '#444';
+      ctx.textBaseline = 'bottom';
+
+      const lineH  = 20;
+      const topPad = maxSets * lineH + 6;
+
+      // Measure widest reps and widest weight strings across all data
+      // so we can right-align each column independently.
+      let maxRepsW   = 0;
+      let maxWeightW = 0;
+      sessions.forEach(sess => sess.sets.forEach(s => {
+        maxRepsW   = Math.max(maxRepsW,   ctx.measureText(String(s.reps)).width);
+        maxWeightW = Math.max(maxWeightW, ctx.measureText(String(s.weight)).width);
+      }));
+
+      const sepW  = ctx.measureText('×').width;
+      const gap   = ctx.measureText(' ').width * 0.5;  // small breathing room
+      // total label block width: "sN: " + repsCol + " × " + weightCol + unit
+      const prefixW = ctx.measureText('s9: ').width;
+      const blockW  = prefixW + maxRepsW + gap + sepW + gap + maxWeightW + ctx.measureText('100kg').width;
+
+      for (let si = 0; si < maxSets; si++) {
+        const rowY = chart.chartArea.top - topPad + si * lineH + lineH;
+
+        sessions.forEach((sess, barIdx) => {
+          if (si >= sess.sets.length) return;
+          const s    = sess.sets[si];
+          const xPos = x.getPixelForValue(barIdx);  // bar centre
+          const startX = xPos - blockW / 2;          // left edge of label block
+
+          // Draw each column with right-alignment within its slot
+          // 1) "sN: " — left-aligned at startX
+          ctx.textAlign = 'left';
+          ctx.fillText(`s${si + 1}: `, startX, rowY);
+
+          // 2) reps — right-aligned in reps column
+          ctx.textAlign = 'right';
+          ctx.fillText(String(s.reps), startX + prefixW + maxRepsW, rowY);
+
+          // 3) "×" — centred between the two number columns
+          ctx.textAlign = 'center';
+          ctx.fillText('×', startX + prefixW + maxRepsW + gap + sepW / 2, rowY);
+
+          // 4) weight — right-aligned in weight column
+          ctx.textAlign = 'right';
+          ctx.fillText(String(s.weight), startX + prefixW + maxRepsW + gap + sepW + gap + maxWeightW, rowY);
+
+          // 5) unit — left-aligned immediately after weight
+          ctx.textAlign = 'left';
+          ctx.fillText(s.unit, startX + prefixW + maxRepsW + gap + sepW + gap + maxWeightW, rowY);
+        });
+      }
+      ctx.restore();
+    }
+  };
+
+  const ctx = document.getElementById('loadChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      layout: {
+        padding: { top: maxSets * 20 + 10 }   // reserve space for label rows
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => {
+              const s = sessions[item.dataIndex].sets[item.datasetIndex];
+              if (!s) return '';
+              return ` s${item.datasetIndex + 1}: ${s.reps}×${s.weight}${s.unit} = ${s.load} kg load`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: { font: { size: 15 } }
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          title: { display: true, text: 'Load (reps × kg)', font: { size: 15 } },
+          ticks: { font: { size: 15 } }
+        }
+      }
+    },
+    plugins: [alignedLabelsPlugin]
+  });
+})();
+</script>
+{% endif %}
+
+{% endblock %}
