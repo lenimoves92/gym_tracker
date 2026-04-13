@@ -25,6 +25,20 @@
   </div>
 </form>
 
+{# ── Log button — right-aligned, starts at 2/3 of page width ── #}
+<div class="row mb-3" style="margin-top: -0.5cm;">
+  <div class="col-4 offset-8 d-flex justify-content-end">
+    {% if selected_id %}
+      <a href="{{ url_for('index') }}?exercise_id={{ selected_id }}"
+         class="btn btn-success btn-lg" style="width: 67%;">
+        Log
+      </a>
+    {% else %}
+      <button class="btn btn-secondary btn-lg" style="width: 67%;" disabled>Log</button>
+    {% endif %}
+  </div>
+</div>
+
 {% if selected_id %}
 
   {# ── Two-column layout: chart left, session cards right ── #}

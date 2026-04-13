@@ -24,7 +24,8 @@ def index():
     cur.execute("SELECT id, name FROM equipment ORDER BY name")
     equipment_list = cur.fetchall()
     conn.close()
-    return render_template('index.html', equipment_list=equipment_list)
+    preselect_id = request.args.get('exercise_id', type=int)
+    return render_template('index.html', equipment_list=equipment_list, preselect_id=preselect_id)
 
 
 @app.route('/log', methods=['POST'])
@@ -106,11 +107,17 @@ def history():
     rows = cur.fetchall()
     conn.close()
 
+    # Group: date -> exercise -> sets
     grouped = {}
     for row in rows:
         date_str = row['logged_at'][:10]
-        grouped.setdefault(date_str, []).append(row)
-    grouped_list = sorted(grouped.items(), reverse=True)
+        exercise = row['exercise']
+        grouped.setdefault(date_str, {}).setdefault(exercise, []).append(row)
+
+    grouped_list = [
+        (date, list(exercises.items()))
+        for date, exercises in sorted(grouped.items(), reverse=True)
+    ]
 
     return render_template('history.html', grouped_list=grouped_list)
 
