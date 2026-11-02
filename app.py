@@ -3,27 +3,29 @@ load_dotenv()
 
 import os
 from datetime import datetime
+import psycopg2
 from flask import Flask, render_template, request, redirect, url_for, flash
-from database import get_db, init_db
+from database import db_cursor, init_db
 
 app = Flask(__name__)
 app.secret_key = 'gym-tracker-secret-key'
 
 RPE_HEAVY_THRESHOLD = 6  # RPE at or below this triggers "go heavier" suggestion
 
-with app.app_context():
+# Seeding is only needed on a fresh database; don't let an unreachable DB stop the app from starting.
+try:
     init_db()
+except psycopg2.OperationalError as e:
+    app.logger.warning("init_db skipped, database unreachable: %s", e)
 
 
 # --- Home: Log a Set ---
 
 @app.route('/')
 def index():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id, name FROM equipment ORDER BY name")
-    equipment_list = cur.fetchall()
-    conn.close()
+    with db_cursor() as cur:
+        cur.execute("SELECT id, name FROM equipment ORDER BY name")
+        equipment_list = cur.fetchall()
     preselect_id = request.args.get('exercise_id', type=int)
     return render_template('index.html', equipment_list=equipment_list, preselect_id=preselect_id)
 
@@ -68,16 +70,13 @@ def log_set():
             flash(e, 'danger')
         return redirect(url_for('index'))
 
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """INSERT INTO workout_sets
-           (equipment_id, weight, weight_unit, reps, rpe, logged_at, notes)
-           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-        (int(equipment_id), w, weight_unit, r, rpe_val, logged_at, notes or None)
-    )
-    conn.commit()
-    conn.close()
+    with db_cursor() as cur:
+        cur.execute(
+            """INSERT INTO workout_sets
+               (equipment_id, weight, weight_unit, reps, rpe, logged_at, notes)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (int(equipment_id), w, weight_unit, r, rpe_val, logged_at, notes or None)
+        )
 
     if rpe_val <= RPE_HEAVY_THRESHOLD:
         flash(
@@ -94,18 +93,16 @@ def log_set():
 
 @app.route('/history')
 def history():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """SELECT ws.id, e.name AS exercise, ws.weight, ws.weight_unit,
-                  ws.reps, ws.rpe, ws.logged_at, ws.notes
-           FROM workout_sets ws
-           JOIN equipment e ON ws.equipment_id = e.id
-           ORDER BY ws.logged_at DESC
-           LIMIT 300"""
-    )
-    rows = cur.fetchall()
-    conn.close()
+    with db_cursor() as cur:
+        cur.execute(
+            """SELECT ws.id, e.name AS exercise, ws.weight, ws.weight_unit,
+                      ws.reps, ws.rpe, ws.logged_at, ws.notes
+               FROM workout_sets ws
+               JOIN equipment e ON ws.equipment_id = e.id
+               ORDER BY ws.logged_at DESC
+               LIMIT 300"""
+        )
+        rows = cur.fetchall()
 
     # Group: date -> exercise -> sets
     grouped = {}
@@ -124,11 +121,8 @@ def history():
 
 @app.route('/delete/<int:set_id>', methods=['POST'])
 def delete_set(set_id):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM workout_sets WHERE id = %s", (set_id,))
-    conn.commit()
-    conn.close()
+    with db_cursor() as cur:
+        cur.execute("DELETE FROM workout_sets WHERE id = %s", (set_id,))
     flash("Set deleted.", 'info')
     return redirect(url_for('history'))
 
@@ -137,11 +131,9 @@ def delete_set(set_id):
 
 @app.route('/equipment')
 def equipment():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id, name, is_custom FROM equipment ORDER BY name")
-    equipment_list = cur.fetchall()
-    conn.close()
+    with db_cursor() as cur:
+        cur.execute("SELECT id, name, is_custom FROM equipment ORDER BY name")
+        equipment_list = cur.fetchall()
     return render_template('equipment.html', equipment_list=equipment_list)
 
 
@@ -152,39 +144,31 @@ def add_equipment():
         flash("Please enter an exercise name.", 'danger')
         return redirect(url_for('equipment'))
 
-    conn = get_db()
-    cur = conn.cursor()
     try:
-        cur.execute(
-            "INSERT INTO equipment (name, is_custom) VALUES (%s, 1)",
-            (name,)
-        )
-        conn.commit()
+        with db_cursor() as cur:
+            cur.execute(
+                "INSERT INTO equipment (name, is_custom) VALUES (%s, 1)",
+                (name,)
+            )
         flash(f"'{name}' added.", 'success')
-    except Exception:
-        conn.rollback()
+    except psycopg2.IntegrityError:
         flash(f"'{name}' already exists.", 'warning')
-    finally:
-        conn.close()
 
     return redirect(url_for('equipment'))
 
 
 @app.route('/equipment/delete/<int:equipment_id>', methods=['POST'])
 def delete_equipment(equipment_id):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT is_custom FROM equipment WHERE id = %s", (equipment_id,)
-    )
-    row = cur.fetchone()
-    if row and row['is_custom'] == 1:
-        cur.execute("DELETE FROM equipment WHERE id = %s", (equipment_id,))
-        conn.commit()
-        flash("Exercise removed.", 'info')
-    else:
-        flash("Cannot delete built-in exercises.", 'warning')
-    conn.close()
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT is_custom FROM equipment WHERE id = %s", (equipment_id,)
+        )
+        row = cur.fetchone()
+        if row and row['is_custom'] == 1:
+            cur.execute("DELETE FROM equipment WHERE id = %s", (equipment_id,))
+            flash("Exercise removed.", 'info')
+        else:
+            flash("Cannot delete built-in exercises.", 'warning')
     return redirect(url_for('equipment'))
 
 
@@ -194,95 +178,92 @@ LBS_TO_KG = 0.453592
 
 @app.route('/overview')
 def overview():
-    conn = get_db()
-    cur = conn.cursor()
-
-    # All exercises for the dropdown
-    cur.execute("SELECT id, name FROM equipment ORDER BY name")
-    equipment_list = cur.fetchall()
-
     selected_id   = request.args.get('exercise_id', type=int)
     selected_name = None
     sessions      = [None, None]   # always two slots; None = no data
     chart_data    = None           # populated when an exercise is selected
 
-    if selected_id:
-        # Resolve display name
-        cur.execute("SELECT name FROM equipment WHERE id = %s", (selected_id,))
-        row = cur.fetchone()
-        if row:
-            selected_name = row['name']
+    with db_cursor() as cur:
+        # All exercises for the dropdown
+        cur.execute("SELECT id, name FROM equipment ORDER BY name")
+        equipment_list = cur.fetchall()
 
-        # Find the last 2 distinct calendar dates for the Topic-1 panel
-        cur.execute(
-            """SELECT DISTINCT DATE(logged_at) AS session_date
-               FROM workout_sets
-               WHERE equipment_id = %s
-               ORDER BY session_date DESC
-               LIMIT 2""",
-            (selected_id,)
-        )
-        date_rows = cur.fetchall()
+        if selected_id:
+            # Resolve display name
+            cur.execute("SELECT name FROM equipment WHERE id = %s", (selected_id,))
+            row = cur.fetchone()
+            if row:
+                selected_name = row['name']
 
-        for i, date_row in enumerate(date_rows):
-            session_date = str(date_row['session_date'])
+            # Find the last 2 distinct calendar dates for the Topic-1 panel
             cur.execute(
-                """SELECT weight, weight_unit, reps, rpe
+                """SELECT DISTINCT DATE(logged_at) AS session_date
                    FROM workout_sets
                    WHERE equipment_id = %s
-                     AND DATE(logged_at) = %s
-                   ORDER BY logged_at ASC""",
-                (selected_id, session_date)
+                   ORDER BY session_date DESC
+                   LIMIT 2""",
+                (selected_id,)
             )
-            sets = cur.fetchall()
-            sessions[i] = {'date': session_date, 'sets': sets}
+            date_rows = cur.fetchall()
 
-        # --- Chart: last 6 session dates ---
-        cur.execute(
-            """SELECT DISTINCT DATE(logged_at) AS session_date
-               FROM workout_sets
-               WHERE equipment_id = %s
-               ORDER BY session_date DESC
-               LIMIT 6""",
-            (selected_id,)
-        )
-        chart_dates = [str(r['session_date']) for r in cur.fetchall()]
-        chart_dates.reverse()   # oldest → newest left to right
+            for i, date_row in enumerate(date_rows):
+                session_date = str(date_row['session_date'])
+                cur.execute(
+                    """SELECT weight, weight_unit, reps, rpe
+                       FROM workout_sets
+                       WHERE equipment_id = %s
+                         AND DATE(logged_at) = %s
+                       ORDER BY logged_at ASC""",
+                    (selected_id, session_date)
+                )
+                sets = cur.fetchall()
+                sessions[i] = {'date': session_date, 'sets': sets}
 
-        # For each date fetch sets in order
-        chart_sessions = []
-        for session_date in chart_dates:
+            # --- Chart: last 6 session dates ---
             cur.execute(
-                """SELECT weight, weight_unit, reps
+                """SELECT DISTINCT DATE(logged_at) AS session_date
                    FROM workout_sets
                    WHERE equipment_id = %s
-                     AND DATE(logged_at) = %s
-                   ORDER BY logged_at ASC""",
-                (selected_id, session_date)
+                   ORDER BY session_date DESC
+                   LIMIT 6""",
+                (selected_id,)
             )
-            raw_sets = cur.fetchall()
-            sets_out = []
-            for s in raw_sets:
-                weight_kg = float(s['weight']) * (LBS_TO_KG if s['weight_unit'] == 'lbs' else 1.0)
-                load      = round(s['reps'] * weight_kg, 1)
-                sets_out.append({
-                    'reps':   s['reps'],
-                    'weight': float(s['weight']),
-                    'unit':   s['weight_unit'],
-                    'load':   load,
-                })
-            chart_sessions.append({'date': session_date, 'sets': sets_out})
+            chart_dates = [str(r['session_date']) for r in cur.fetchall()]
+            chart_dates.reverse()   # oldest → newest left to right
 
-        # How many set-slots do we need across all sessions?
-        max_sets = max((len(s['sets']) for s in chart_sessions), default=0)
+            # For each date fetch sets in order
+            chart_sessions = []
+            for session_date in chart_dates:
+                cur.execute(
+                    """SELECT weight, weight_unit, reps
+                       FROM workout_sets
+                       WHERE equipment_id = %s
+                         AND DATE(logged_at) = %s
+                       ORDER BY logged_at ASC""",
+                    (selected_id, session_date)
+                )
+                raw_sets = cur.fetchall()
+                sets_out = []
+                for s in raw_sets:
+                    weight_kg = float(s['weight']) * (LBS_TO_KG if s['weight_unit'] == 'lbs' else 1.0)
+                    load      = round(s['reps'] * weight_kg, 1)
+                    sets_out.append({
+                        'reps':   s['reps'],
+                        'weight': float(s['weight']),
+                        'unit':   s['weight_unit'],
+                        'load':   load,
+                    })
+                chart_sessions.append({'date': session_date, 'sets': sets_out})
 
-        chart_data = {
-            'dates':       chart_dates,
-            'sessions':    chart_sessions,
-            'max_sets':    max_sets,
-        }
+            # How many set-slots do we need across all sessions?
+            max_sets = max((len(s['sets']) for s in chart_sessions), default=0)
 
-    conn.close()
+            chart_data = {
+                'dates':       chart_dates,
+                'sessions':    chart_sessions,
+                'max_sets':    max_sets,
+            }
+
     return render_template(
         'overview.html',
         equipment_list=equipment_list,
