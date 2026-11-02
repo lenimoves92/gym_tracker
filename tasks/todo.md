@@ -9,8 +9,9 @@ every page; Render cold starts needed several attempts.
 - [x] Verify: all pages render locally against Supabase, duplicate-exercise path,
       unreachable DB → startup OK + fast failure, connections closed on exceptions
 - [x] 4. gunicorn: added to requirements.txt, render.yaml startCommand updated
-- [ ] Deploy: push to main, set Start Command in Render dashboard, verify
+- [x] Deploy: push to main (b64d1ed), set Start Command in Render dashboard, verify
       `x-render-origin-server` header shows gunicorn instead of Werkzeug
+      → live on gunicorn since 10:50; all 5 pages 200 in 0.4–0.75s, no errors
 
 ## Review
 
