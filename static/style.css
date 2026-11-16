@@ -12,6 +12,17 @@ body {
     font-size: 0.95rem;
 }
 
+/* Phone nav: brand on line 1, all buttons on one line below (labels keep their size, spacing shrinks) */
+@media (max-width: 575.98px) {
+    .navbar { padding-block: 0.35rem; }
+    .navbar-brand { font-size: 1.1rem; padding-block: 0.1rem; }
+    .nav-buttons { width: 100%; display: flex; justify-content: space-between; gap: 0.2rem; }
+    .nav-buttons .btn { margin: 0 !important; padding-inline: 0.35rem; }
+}
+@media (max-width: 359.98px) {
+    .nav-buttons .btn { padding-inline: 0.2rem; }
+}
+
 /* Make the RPE slider bigger for fat fingers */
 input[type="range"] {
     height: 2rem;

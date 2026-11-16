@@ -3,6 +3,7 @@ load_dotenv()
 
 import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import psycopg2
 from flask import Flask, render_template, request, redirect, url_for, flash
 from database import db_cursor, init_db
@@ -11,12 +12,38 @@ app = Flask(__name__)
 app.secret_key = 'gym-tracker-secret-key'
 
 RPE_HEAVY_THRESHOLD = 6  # RPE at or below this triggers "go heavier" suggestion
+LOCAL_TZ = ZoneInfo('Europe/Berlin')  # timestamps and the daily "done today" reset use this zone
+LBS_TO_KG = 0.453592
+
+# PR ranking: heaviest weight (compared in kg) > most reps > most recent
+PR_ORDER = f"""weight * CASE WHEN weight_unit = 'lbs' THEN {LBS_TO_KG} ELSE 1 END DESC,
+               reps DESC, logged_at DESC"""
 
 # Seeding is only needed on a fresh database; don't let an unreachable DB stop the app from starting.
 try:
     init_db()
 except psycopg2.OperationalError as e:
     app.logger.warning("init_db skipped, database unreachable: %s", e)
+
+
+def local_now():
+    return datetime.now(LOCAL_TZ)
+
+
+def done_today_ids(cur):
+    """IDs of exercises with at least one set logged today (local calendar day)."""
+    today = local_now().date().isoformat()
+    cur.execute(
+        "SELECT DISTINCT equipment_id FROM workout_sets WHERE DATE(logged_at) = %s",
+        (today,)
+    )
+    return {r['equipment_id'] for r in cur.fetchall()}
+
+
+@app.template_filter('de_date')
+def de_date(value):
+    """'2026-11-16 ...' -> '16.11.2026'"""
+    return datetime.strptime(str(value)[:10], '%Y-%m-%d').strftime('%d.%m.%Y')
 
 
 # --- Home: Log a Set ---
@@ -26,8 +53,10 @@ def index():
     with db_cursor() as cur:
         cur.execute("SELECT id, name FROM equipment ORDER BY name")
         equipment_list = cur.fetchall()
+        done_today = done_today_ids(cur)
     preselect_id = request.args.get('exercise_id', type=int)
-    return render_template('index.html', equipment_list=equipment_list, preselect_id=preselect_id)
+    return render_template('index.html', equipment_list=equipment_list,
+                           preselect_id=preselect_id, done_today=done_today)
 
 
 @app.route('/log', methods=['POST'])
@@ -38,7 +67,7 @@ def log_set():
     reps         = request.form.get('reps')
     rpe          = request.form.get('rpe')
     notes        = request.form.get('notes', '').strip()
-    logged_at    = datetime.now().isoformat(sep=' ', timespec='seconds')
+    logged_at    = local_now().strftime('%Y-%m-%d %H:%M:%S')
 
     errors = []
     if not equipment_id:
@@ -174,19 +203,19 @@ def delete_equipment(equipment_id):
 
 # --- Overview ---
 
-LBS_TO_KG = 0.453592
-
 @app.route('/overview')
 def overview():
     selected_id   = request.args.get('exercise_id', type=int)
     selected_name = None
     sessions      = [None, None]   # always two slots; None = no data
     chart_data    = None           # populated when an exercise is selected
+    pr            = None           # personal record set of the selected exercise
 
     with db_cursor() as cur:
         # All exercises for the dropdown
         cur.execute("SELECT id, name FROM equipment ORDER BY name")
         equipment_list = cur.fetchall()
+        done_today = done_today_ids(cur)
 
         if selected_id:
             # Resolve display name
@@ -219,13 +248,24 @@ def overview():
                 sets = cur.fetchall()
                 sessions[i] = {'date': session_date, 'sets': sets}
 
-            # --- Chart: last 6 session dates ---
+            # --- PR ---
+            cur.execute(
+                f"""SELECT weight, weight_unit, reps, logged_at
+                    FROM workout_sets
+                    WHERE equipment_id = %s
+                    ORDER BY {PR_ORDER}
+                    LIMIT 1""",
+                (selected_id,)
+            )
+            pr = cur.fetchone()
+
+            # --- Chart: last 3 session dates (more is unreadable on a phone) ---
             cur.execute(
                 """SELECT DISTINCT DATE(logged_at) AS session_date
                    FROM workout_sets
                    WHERE equipment_id = %s
                    ORDER BY session_date DESC
-                   LIMIT 6""",
+                   LIMIT 3""",
                 (selected_id,)
             )
             chart_dates = [str(r['session_date']) for r in cur.fetchall()]
@@ -271,7 +311,29 @@ def overview():
         selected_name=selected_name,
         sessions=sessions,
         chart_data=chart_data,
+        pr=pr,
+        done_today=done_today,
     )
+
+
+# --- Personal Records ---
+
+@app.route('/records')
+def records():
+    with db_cursor() as cur:
+        # One PR row per exercise that has logged sets
+        cur.execute(
+            f"""SELECT * FROM (
+                    SELECT DISTINCT ON (equipment_id)
+                           equipment_id, weight, weight_unit, reps, logged_at
+                    FROM workout_sets
+                    ORDER BY equipment_id, {PR_ORDER}
+                ) pr
+                JOIN equipment e ON e.id = pr.equipment_id
+                ORDER BY e.name"""
+        )
+        pr_list = cur.fetchall()
+    return render_template('records.html', pr_list=pr_list)
 
 
 # --- Entry point ---

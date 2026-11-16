@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="mb-4">Personal Records</h2>
+
+{% if not pr_list %}
+  <p class="text-muted">No sets logged yet. Go log one!</p>
+{% else %}
+  <div class="card shadow-sm">
+    <div class="card-body py-2">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="text-muted small">
+          <tr>
+            <th>Exercise</th>
+            <th class="text-nowrap">Weight</th>
+            <th>Reps</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pr in pr_list %}
+          <tr>
+            <td>
+              <a href="{{ url_for('overview', exercise_id=pr['equipment_id']) }}"
+                 class="text-reset text-decoration-none">{{ pr['name'] }}</a>
+            </td>
+            <td class="text-nowrap">{{ pr['weight'] }} {{ pr['weight_unit'] }}</td>
+            <td>{{ pr['reps'] }}</td>
+            <td class="text-nowrap">{{ pr['logged_at'] | de_date }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="text-muted small mt-2">Heaviest weight per exercise; ties go to more reps, then the most recent set.</p>
+{% endif %}
+
+{% endblock %}

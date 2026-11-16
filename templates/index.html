@@ -6,13 +6,15 @@
 <form action="{{ url_for('log_set') }}" method="POST">
 
   <div class="mb-3">
-    <label for="equipment_id" class="form-label fw-bold">Exercise</label>
+    <label for="equipment_id" class="form-label fw-bold">
+      Exercise <span class="text-muted fw-normal small">(✓ = done today)</span>
+    </label>
     <select name="equipment_id" id="equipment_id" class="form-select form-select-lg" required>
       <option value="">-- Choose exercise --</option>
       {% for item in equipment_list %}
         <option value="{{ item['id'] }}"
           {% if item['id'] == preselect_id %}selected{% endif %}>
-          {{ item['name'] }}
+          {% if item['id'] in done_today %}✓ {% endif %}{{ item['name'] }}
         </option>
       {% endfor %}
     </select>

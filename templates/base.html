@@ -11,15 +11,16 @@
 <body>
     <nav class="navbar navbar-dark bg-dark px-3">
         <span class="navbar-brand fw-bold">Gym Tracker</span>
-        <div>
+        <div class="nav-buttons">
             <a href="{{ url_for('overview') }}" class="btn btn-sm btn-outline-light me-1">Overview</a>
-            <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-light me-1">Log Set</a>
+            <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-light me-1">Log</a>
             <a href="{{ url_for('history') }}" class="btn btn-sm btn-outline-light me-1">History</a>
+            <a href="{{ url_for('records') }}" class="btn btn-sm btn-outline-light me-1">PRs</a>
             <a href="{{ url_for('equipment') }}" class="btn btn-sm btn-outline-light">Equipment</a>
         </div>
     </nav>
 
-    <div class="container mt-4 pb-5">
+    <div class="container {% block container_spacing %}mt-4 pb-5{% endblock %}">
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}

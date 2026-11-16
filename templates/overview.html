@@ -1,108 +1,199 @@
 {% extends "base.html" %}
+{% block container_spacing %}mt-3 mt-md-4 pb-2 pb-md-5{% endblock %}
 {% block content %}
 
-<h2 class="mb-4">Overview</h2>
+{# ── Layout (CSS grid, see <style> below)
+     Phone:   title + Log / selector / chart / PR / sessions — PR and session tables share columns
+     Desktop: title / selector · PR · Log / chart (2/3) · sessions (1/3) — fits one screen ── #}
+<div class="ov-page">
 
-{# ── Exercise selector ── #}
-<form method="GET" action="{{ url_for('overview') }}" class="mb-4">
-  <div class="row g-2 align-items-center">
-    <div class="col-auto">
-      <label for="exercise_id" class="col-form-label fw-semibold">Exercise:</label>
-    </div>
-    <div class="col-auto">
-      <select name="exercise_id" id="exercise_id"
-              class="form-select form-select-lg"
-              onchange="this.form.submit()">
-        <option value="">— select —</option>
-        {% for e in equipment_list %}
-          <option value="{{ e['id'] }}"
-            {% if e['id'] == selected_id %}selected{% endif %}>
-            {{ e['name'] }}
-          </option>
-        {% endfor %}
-      </select>
-    </div>
-  </div>
-</form>
+  <h2 class="ov-title mb-0">Overview</h2>
 
-{# ── Log button — right-aligned, starts at 2/3 of page width ── #}
-<div class="row mb-3" style="margin-top: -0.5cm;">
-  <div class="col-4 offset-8 d-flex justify-content-end">
+  {# ── Log button ── #}
+  <div class="ov-log">
     {% if selected_id %}
       <a href="{{ url_for('index') }}?exercise_id={{ selected_id }}"
-         class="btn btn-success btn-lg" style="width: 67%;">
+         class="btn btn-success btn-lg w-100">
         Log
       </a>
     {% else %}
-      <button class="btn btn-secondary btn-lg" style="width: 67%;" disabled>Log</button>
+      <button type="button" class="btn btn-secondary btn-lg w-100" disabled>Log</button>
     {% endif %}
   </div>
-</div>
+
+  {# ── Exercise selector ── #}
+  <form method="GET" action="{{ url_for('overview') }}"
+        class="ov-select d-flex gap-2 align-items-center">
+    <label for="exercise_id" class="fw-semibold">Exercise:</label>
+    <select name="exercise_id" id="exercise_id"
+            class="form-select form-select-lg"
+            onchange="this.form.submit()">
+      <option value="">— select —</option>
+      {% for e in equipment_list %}
+        <option value="{{ e['id'] }}"
+          {% if e['id'] == selected_id %}selected{% endif %}>
+          {% if e['id'] in done_today %}✓ {% endif %}{{ e['name'] }}
+        </option>
+      {% endfor %}
+    </select>
+  </form>
 
 {% if selected_id %}
 
-  {# ── Two-column layout: chart left, session cards right ── #}
-  <div class="row g-4 align-items-start">
+  {# ── Chart (Topic 2) ── #}
+  <div class="ov-chart">
+    {% if chart_data and chart_data.dates %}
+      <div class="chart-box"><canvas id="loadChart"></canvas></div>
+    {% else %}
+      <p class="text-muted mb-0">No training data yet for this exercise.</p>
+    {% endif %}
+  </div>
 
-    {# ── Chart (Topic 2) — left, ~2/3 width ── #}
-    <div class="col-12 col-md-8">
-      {% if chart_data and chart_data.dates %}
-        <canvas id="loadChart"></canvas>
-      {% else %}
-        <p class="text-muted">No training data yet for this exercise.</p>
-      {% endif %}
-    </div>
-
-    {# ── Last 2 Sessions (Topic 1) — right, ~1/3 width, stacked ── #}
-    <div class="col-12 col-md-4">
-      {% for session in sessions %}
-      <div class="card shadow-sm mb-3
-        {% if session %}border-primary{% else %}border-secondary{% endif %}">
-        <div class="card-header fw-semibold
-          {% if session %}bg-primary text-white{% else %}bg-light text-muted{% endif %}">
-          {% if session %}
-            {{ "Last session" if loop.index == 1 else "Previous session" }}
-            &mdash; {{ session['date'] }}
-          {% else %}
-            {{ "Last session" if loop.index == 1 else "Previous session" }}
-            &mdash; no data
-          {% endif %}
-        </div>
-        <div class="card-body py-2">
-          {% if session %}
-            <table class="table table-sm table-borderless mb-0">
-              <thead class="text-muted small">
-                <tr>
-                  <th>#</th>
-                  <th>Reps</th>
-                  <th>Weight</th>
-                  <th>RPE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for s in session['sets'] %}
-                <tr>
-                  <td class="text-muted">{{ loop.index }}</td>
-                  <td>{{ s['reps'] }}</td>
-                  <td>{{ s['weight'] }} {{ s['weight_unit'] }}</td>
-                  <td>{{ s['rpe'] }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          {% else %}
-            <p class="text-muted mb-0">—</p>
-          {% endif %}
-        </div>
+  {# ── Personal record (Topic 3) — same columns as the session tables ── #}
+  <div class="ov-pr">
+    <div class="card shadow-sm
+      {% if pr %}border-dark{% else %}border-secondary{% endif %}">
+      <div class="card-header fw-semibold
+        {% if pr %}bg-dark text-white{% else %}bg-light text-muted{% endif %}">
+        Personal record{% if not pr %} &mdash; no data{% endif %}
       </div>
-      {% endfor %}
+      <div class="card-body">
+        {% if pr %}
+          <table class="table table-sm table-borderless mb-0 ov-table">
+            <thead class="text-muted small">
+              <tr>
+                <th></th>
+                <th>Reps</th>
+                <th>Weight</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td></td>
+                <td>{{ pr['reps'] }}</td>
+                <td>{{ pr['weight'] }} {{ pr['weight_unit'] }}</td>
+                <td>{{ pr['logged_at'] | de_date }}</td>
+              </tr>
+            </tbody>
+          </table>
+        {% else %}
+          <p class="text-muted mb-0">—</p>
+        {% endif %}
+      </div>
     </div>
+  </div>
 
-  </div>{# end row #}
+  {# ── Last 2 Sessions (Topic 1) ── #}
+  <div class="ov-sessions">
+    {% for session in sessions %}
+    <div class="card shadow-sm
+      {% if session %}border-primary{% else %}border-secondary{% endif %}">
+      <div class="card-header fw-semibold
+        {% if session %}bg-primary text-white{% else %}bg-light text-muted{% endif %}">
+        {{ "Last session" if loop.index == 1 else "Previous session" }}
+        &mdash; {{ session['date'] if session else "no data" }}
+      </div>
+      <div class="card-body">
+        {% if session %}
+          <table class="table table-sm table-borderless mb-0 ov-table">
+            <thead class="text-muted small">
+              <tr>
+                <th>#</th>
+                <th>Reps</th>
+                <th>Weight</th>
+                <th>RPE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in session['sets'] %}
+              <tr>
+                <td class="text-muted">{{ loop.index }}</td>
+                <td>{{ s['reps'] }}</td>
+                <td>{{ s['weight'] }} {{ s['weight_unit'] }}</td>
+                <td>{{ s['rpe'] }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="text-muted mb-0">—</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
 
 {% else %}
-  <p class="text-muted">Select an exercise above to see your last sessions.</p>
+  <p class="ov-chart text-muted">Select an exercise above to see your last sessions.</p>
 {% endif %}
+
+</div>{# end ov-page #}
+
+<style>
+  /* ── Phone: one column, Log beside the title ── */
+  .ov-page {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "title    log"
+      "select   select"
+      "chart    chart"
+      "pr       pr"
+      "sessions sessions";
+    column-gap: 1.5rem;
+    row-gap: 0.6rem;
+    align-items: center;
+  }
+  .ov-title    { grid-area: title; }
+  .ov-log      { grid-area: log; justify-self: start; width: 6rem; }
+  .ov-select   { grid-area: select; }
+  .ov-select select { flex: 1 1 auto; min-width: 0; }   /* long names must not push past the screen */
+  .ov-chart    { grid-area: chart; }
+  .ov-pr       { grid-area: pr; }
+  .ov-sessions { grid-area: sessions; display: flex; flex-direction: column; gap: 0.6rem; }
+  .chart-box   { position: relative; aspect-ratio: 2; }
+
+  /* Compact cards; fixed, shared column widths so PR and session columns line up */
+  .ov-page .card-header { padding-block: 0.25rem; }
+  .ov-page .card-body   { padding-block: 0.25rem; }
+  .ov-page .table > :not(caption) > * > * { padding-block: 0.05rem; }
+  .ov-table { table-layout: fixed; }
+  .ov-table tr > :nth-child(1) { width: 12%; }
+  .ov-table tr > :nth-child(2) { width: 20%; }
+  .ov-table tr > :nth-child(3) { width: 33%; }
+
+  /* ── Phone only: tighten everything so chart, PR and both sessions fit one screen ── */
+  @media (max-width: 767.98px) {
+    .ov-page     { row-gap: 0.4rem; }
+    .ov-sessions { gap: 0.4rem; }
+    .ov-title    { font-size: 1.6rem; }
+    .ov-log .btn { padding-block: 0.25rem; font-size: 1.1rem; }
+    .ov-select .form-select { padding-block: 0.3rem; font-size: 1rem; }
+    .chart-box   { aspect-ratio: 2.5; }
+    .ov-page .card-header { padding-block: 0.15rem; font-size: 0.9rem; }
+    .ov-page .table { line-height: 1.3; }
+    /* Previous session's columns line up with Last session right above it — skip the repeat header */
+    .ov-sessions .card + .card thead { display: none; }
+  }
+
+  /* ── Desktop: selector · PR · Log in one row, chart (2/3) beside sessions (1/3) ── */
+  @media (min-width: 768px) {
+    .ov-page {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-areas:
+        "title  title  title"
+        "select pr     log"
+        "chart  chart  sessions";
+      row-gap: 1.25rem;
+    }
+    .ov-log      { justify-self: end; width: 67%; }
+    .ov-pr       { justify-self: center; width: min(100%, 22rem); }
+    .ov-chart, .ov-sessions { align-self: start; }
+    /* Chart takes whatever height is left after header, title, selector row and page padding */
+    .chart-box   { aspect-ratio: auto; height: clamp(14rem, calc(100vh - 21rem), 30rem); }
+  }
+</style>
 
 {% if chart_data and chart_data.dates %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -139,13 +230,12 @@
   }
 
   // ── Custom plugin: column-aligned row labels above bars ──
-  const LABEL_FONT = '15px monospace';   // ~0.95rem
+  const LABEL_SIZE = 15;   // px, ~0.95rem; shrunk on narrow screens so labels don't overlap
   const alignedLabelsPlugin = {
     id: 'alignedLabels',
     afterDatasetsDraw(chart) {
       const { ctx, scales: { x } } = chart;
       ctx.save();
-      ctx.font         = LABEL_FONT;
       ctx.fillStyle    = '#444';
       ctx.textBaseline = 'bottom';
 
@@ -154,18 +244,25 @@
 
       // Measure widest reps and widest weight strings across all data
       // so we can right-align each column independently.
-      let maxRepsW   = 0;
-      let maxWeightW = 0;
-      sessions.forEach(sess => sess.sets.forEach(s => {
-        maxRepsW   = Math.max(maxRepsW,   ctx.measureText(String(s.reps)).width);
-        maxWeightW = Math.max(maxWeightW, ctx.measureText(String(s.weight)).width);
-      }));
+      let maxRepsW, maxWeightW, sepW, gap, blockW;
+      const measure = (size) => {
+        ctx.font   = `${size}px monospace`;
+        maxRepsW   = 0;
+        maxWeightW = 0;
+        sessions.forEach(sess => sess.sets.forEach(s => {
+          maxRepsW   = Math.max(maxRepsW,   ctx.measureText(String(s.reps)).width);
+          maxWeightW = Math.max(maxWeightW, ctx.measureText(String(s.weight)).width);
+        }));
+        sepW    = ctx.measureText('×').width;
+        gap     = ctx.measureText(' ').width * 0.5;  // small breathing room
+        // total label block width: repsCol + " × " + weightCol + unit
+        blockW  = maxRepsW + gap + sepW + gap + maxWeightW + ctx.measureText('lbs').width;
+      };
+      measure(LABEL_SIZE);
 
-      const sepW  = ctx.measureText('×').width;
-      const gap   = ctx.measureText(' ').width * 0.5;  // small breathing room
-      // total label block width: "sN: " + repsCol + " × " + weightCol + unit
-      const prefixW = ctx.measureText('s9: ').width;
-      const blockW  = prefixW + maxRepsW + gap + sepW + gap + maxWeightW + ctx.measureText('100kg').width;
+      // Each bar owns an equal slice of the x axis; shrink the font until the block fits in it
+      const slotW = chart.chartArea.width / labels.length - 6;
+      if (blockW > slotW) measure(Math.floor(LABEL_SIZE * slotW / blockW));
 
       for (let si = 0; si < maxSets; si++) {
         const rowY = chart.chartArea.top - topPad + si * lineH + lineH;
@@ -177,25 +274,21 @@
           const startX = xPos - blockW / 2;          // left edge of label block
 
           // Draw each column with right-alignment within its slot
-          // 1) "sN: " — left-aligned at startX
-          ctx.textAlign = 'left';
-          ctx.fillText(`s${si + 1}: `, startX, rowY);
-
-          // 2) reps — right-aligned in reps column
+          // 1) reps — right-aligned in reps column
           ctx.textAlign = 'right';
-          ctx.fillText(String(s.reps), startX + prefixW + maxRepsW, rowY);
+          ctx.fillText(String(s.reps), startX + maxRepsW, rowY);
 
-          // 3) "×" — centred between the two number columns
+          // 2) "×" — centred between the two number columns
           ctx.textAlign = 'center';
-          ctx.fillText('×', startX + prefixW + maxRepsW + gap + sepW / 2, rowY);
+          ctx.fillText('×', startX + maxRepsW + gap + sepW / 2, rowY);
 
-          // 4) weight — right-aligned in weight column
+          // 3) weight — right-aligned in weight column
           ctx.textAlign = 'right';
-          ctx.fillText(String(s.weight), startX + prefixW + maxRepsW + gap + sepW + gap + maxWeightW, rowY);
+          ctx.fillText(String(s.weight), startX + maxRepsW + gap + sepW + gap + maxWeightW, rowY);
 
-          // 5) unit — left-aligned immediately after weight
+          // 4) unit — left-aligned immediately after weight
           ctx.textAlign = 'left';
-          ctx.fillText(s.unit, startX + prefixW + maxRepsW + gap + sepW + gap + maxWeightW, rowY);
+          ctx.fillText(s.unit, startX + maxRepsW + gap + sepW + gap + maxWeightW, rowY);
         });
       }
       ctx.restore();
@@ -207,6 +300,7 @@
     type: 'bar',
     data: { labels, datasets },
     options: {
+      maintainAspectRatio: false,   // size comes from .chart-box
       layout: {
         padding: { top: maxSets * 20 + 10 }   // reserve space for label rows
       },
