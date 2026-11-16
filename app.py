@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import psycopg2
 from flask import Flask, render_template, request, redirect, url_for, flash
 from database import db_cursor, init_db
+from workout_types import with_type
 
 app = Flask(__name__)
 app.secret_key = 'gym-tracker-secret-key'
@@ -38,6 +39,9 @@ def done_today_ids(cur):
         (today,)
     )
     return {r['equipment_id'] for r in cur.fetchall()}
+
+
+app.add_template_filter(with_type, 'with_type')  # display-only "Name (Q)" suffix
 
 
 @app.template_filter('de_date')

@@ -14,7 +14,7 @@
       {% for item in equipment_list %}
         <option value="{{ item['id'] }}"
           {% if item['id'] == preselect_id %}selected{% endif %}>
-          {% if item['id'] in done_today %}✓ {% endif %}{{ item['name'] }}
+          {% if item['id'] in done_today %}✓ {% endif %}{{ item['name'] | with_type }}
         </option>
       {% endfor %}
     </select>

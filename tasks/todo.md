@@ -1,3 +1,21 @@
+# Workout-type classification (2026-11-16)
+
+- [x] Read matrix (`uebungsmatrix_gym-tracker.xlsx`): 36 rows, columns Quick/Regular/Extended/Bonus,
+      exactly one "x" per row, no duplicates
+- [x] Single source `exercise_types.json` (name → Q/R/E/B) + `workout_types.py` loader;
+      `tools/import_exercise_types.py` regenerates the JSON from the Excel
+- [x] Log dropdown shows "Name (Q)" via `with_type` filter — display only
+- [x] Verify: option values still equipment ids, suffix nowhere else, DB names unchanged,
+      earlier checks (PRs, ticks, overview) still pass
+
+## Review
+
+- Counts: Q 6 · R 9 · E 8 · B 13 (36)
+- Name mismatch: Excel "Pull Up / Chin Up" vs app "Pull-Up / Chin-Up" → not matched, app
+  exercise shows without suffix until the Excel name is fixed and the import re-run
+- Excel autocorrected the headers "(R)" → "®" and "(E)" → "€"; importer matches header words
+- Custom exercises added later via Equipment have no type until added to the matrix
+
 # Session ticks, 3-date chart, PRs (2026-11-16)
 
 - [x] 0. Berlin time: `tzdata` in requirements, `local_now()` helper; new sets stamped in Europe/Berlin
