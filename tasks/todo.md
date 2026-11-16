@@ -11,8 +11,8 @@
 ## Review
 
 - Counts: Q 6 · R 9 · E 8 · B 13 (36)
-- Name mismatch: Excel "Pull Up / Chin Up" vs app "Pull-Up / Chin-Up" → not matched, app
-  exercise shows without suffix until the Excel name is fixed and the import re-run
+- Name mismatch: Excel "Pull Up / Chin Up" vs app "Pull-Up / Chin-Up" → mapped via
+  `NAME_ALIASES` in the importer (confirmed by user), so re-imports keep it
 - Excel autocorrected the headers "(R)" → "®" and "(E)" → "€"; importer matches header words
 - Custom exercises added later via Equipment have no type until added to the matrix
 

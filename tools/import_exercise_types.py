@@ -15,6 +15,8 @@ import openpyxl
 
 OUT = Path(__file__).resolve().parent.parent / 'exercise_types.json'
 TYPES = {'Q': 'Quick', 'R': 'Regular', 'E': 'Extended', 'B': 'Bonus'}
+# Excel spelling -> exercise name as stored in the app
+NAME_ALIASES = {'Pull Up / Chin Up': 'Pull-Up / Chin-Up'}
 
 
 def main(xlsx_path):
@@ -38,6 +40,7 @@ def main(xlsx_path):
         name = str(row[0]).strip() if row[0] else ''
         if not name or name.startswith('Anzahl'):  # skip blanks and the totals row
             continue
+        name = NAME_ALIASES.get(name, name)
         marks = [code for code, col in columns.items()
                  if row[col] and str(row[col]).strip().lower() == 'x']
         if name in exercises:
