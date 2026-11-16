@@ -32,7 +32,7 @@
       {% for e in equipment_list %}
         <option value="{{ e['id'] }}"
           {% if e['id'] == selected_id %}selected{% endif %}>
-          {% if e['id'] in done_today %}✓ {% endif %}{{ e['name'] }}
+          {% if e['id'] in done_today %}✓ {% endif %}{{ e['name'] | with_type }}
         </option>
       {% endfor %}
     </select>
