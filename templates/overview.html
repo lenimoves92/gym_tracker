@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block body_class %}ov-body{% endblock %}
 {% block container_spacing %}mt-3 mt-md-4 pb-2 pb-md-5{% endblock %}
 {% block content %}
 
@@ -175,6 +176,20 @@
     .ov-page .table { line-height: 1.3; }
     /* Previous session's columns line up with Last session right above it — skip the repeat header */
     .ov-sessions .card + .card thead { display: none; }
+
+    /* Fill the screen height and spread leftover space evenly between the rows
+       (tall phones like iPhone 13 Pro Max; on short phones there is none to spread).
+       svh = viewport with Safari's toolbars shown, so this never causes scrolling. */
+    body.ov-body { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; }
+    body.ov-body > .container { flex: 1 0 auto; display: flex; flex-direction: column; }
+    .ov-page     { flex: 1 0 auto; align-content: space-evenly; }
+
+    /* Tighter top: space above the title −20%, below it −10% (tuned on iPhone 13 Pro Max).
+       The saved 8px goes to the bottom padding, so the other gaps keep their size and
+       everything below the title simply moves up. */
+    body.ov-body > .container { margin-top: 0.625rem !important; }  /* was 1rem (mt-3): −6px */
+    .ov-title, .ov-log { margin-bottom: -0.125rem; }                 /* title row −2px */
+    .ov-page     { padding-bottom: 0.5rem; }                         /* = 6px + 2px saved */
   }
 
   /* ── Desktop: selector · PR · Log in one row, chart (2/3) beside sessions (1/3) ── */
